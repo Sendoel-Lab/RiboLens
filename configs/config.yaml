@@ -1,0 +1,84 @@
+# ============================================================
+# scribo-seq Pipeline Configuration
+# ============================================================
+# Copy this file per experiment and adjust values as needed.
+# Run: snakemake -j 16 --configfile my_config.yaml
+
+# ---- Demultiplexing (bcl2fastq) ----
+# Set run_demux: true to start from BCL files. Set false to start from FASTQs.
+run_demux: false
+bcl_run_dir: ""              # path to Illumina run directory (e.g., 20250709_LH00289_0304_A233HLJLT3)
+sample_sheet: ""             # path to demux.csv sample sheet
+bcl2fastq_path: "bcl2fastq"  # absolute path, or assume on PATH
+barcode_mismatches: 1
+fastq_compression: 9
+no_lane_splitting: false     # set true for --no-lane-splitting
+bcl2fastq_extra_opts: "--ignore-missing-bcls --minimum-trimmed-read-length 5 --mask-short-adapter-reads 5"
+
+# ---- Input / Output ----
+# When run_demux: true, fastq_dir is ignored (FASTQs come from demux output).
+# When run_demux: false, set fastq_dir to directory with *.fastq.gz files.
+fastq_dir: ""
+output_dir: "results"
+# samples: []              # explicit sample list; if absent, auto-discover from fastq_dir or sample_sheet
+
+# ---- Trimming (fastp) ----
+adapter_seq: "TGGAATTCTCGG"  # adapter to trim; older experiments used "TGGAATTCTC"
+min_length: 26               # min read length after trim
+max_length: 34               # max read length after trim
+umi_len: 10                  # UMI length (from read1 5' end)
+
+# ---- rRNA removal (bowtie2) ----
+rrna_index: "/path/to/bowtie2/rrna_trna_index"  # bowtie2 index prefix
+
+# ---- Ribodetector (optional second rRNA filter) ----
+run_ribodetector: true
+ribodetector_path: "ribodetector_cpu"  # absolute path, or assume on PATH (scribo env)
+ribodetector_len: 29
+ribodetector_chunk_size: 6000
+
+# ---- STAR alignment ----
+star_index: "/path/to/star/genome_index"  # built with mouse GRCm38 / gencode vM25
+star_multimap_nmax: 20
+star_mismatch_nmax: 1
+star_solo_multi_mappers: "EM"                    # "" to use STAR default
+star_solo_umi_dedup: "1MM_Directional_UMItools"  # "" to use STAR default
+star_solo_cb_match: "1MM"                        # "" to use STAR default
+star_solo_features: "Gene Velocyto"
+star_align_ends_type: "EndToEnd"
+star_extra_opts: ""          # any additional STAR flags
+
+# ---- References ----
+gtf: "/path/to/gencode.vM25.annotation.gtf"
+whitelist: "scripts/miRv6.whitelist.txt"
+scripts_dir: "scripts"
+
+# ---- Post-alignment ----
+
+# ---- Optional steps ----
+run_bam_split: false          # split dedup BAM into per-cell BAMs
+run_featurecounts: false      # run featureCounts on per-cell BAMs (requires run_bam_split)
+featurecounts_opts: "-s 1"  # add "-M -O --fraction" to include multi-mappers with fractional counts
+featurecounts_feature_type: "CDS"
+featurecounts_group_by: "gene_name"
+
+run_ribowaltz: false           # run riboWaltz CDS-level footprint QC (needs scribo-ribowaltz env)
+ribowaltz_annotation: "/path/to/ribowaltz_m25_anno.csv"  # CSV with transcript, l_tr, l_utr5, l_cds, l_utr3
+ribowaltz_cds_only: true       # true = only CDS-containing transcripts; false = all transcripts
+ribowaltz_conda_env: "scribo-ribowaltz"
+
+run_report: false              # build per-sample HTML QC report (requires run_ribowaltz, needs scribo-analysis env)
+analysis_conda_env: "scribo-analysis"
+periodicity_min_reads: 50      # min reads/cell for single-cell periodicity heatmap
+
+run_salmon: false             # run salmon alevin as alternative quantification
+salmon_index: ""
+salmon_tgmap: ""
+
+# ---- Resources ----
+threads: 16                    # default thread count for most rules
+threads_star: 24               # STAR alignment (memory-intensive, benefits from more threads)
+threads_bowtie2: 16            # bowtie2 rRNA removal
+threads_ribodetector: 12       # ribodetector rRNA filter
+threads_salmon: 8              # salmon alevin
+threads_featurecounts: 8       # featureCounts

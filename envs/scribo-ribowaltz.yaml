@@ -1,0 +1,11 @@
+name: scribo-ribowaltz
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - ribowaltz
+  - r-data.table
+  - r-ggplot2
+  - r-viridis
+  - r-optparse

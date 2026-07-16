@@ -1,0 +1,20 @@
+name: scribo
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.9,<3.12
+  - snakemake>=7.0
+  - fastp=0.23.4
+  - bowtie2=2.2.5
+  - star>=2.7.11b
+  - samtools=1.6
+  - sambamba=1.0.1
+  - umi_tools=1.1.4
+  - salmon=1.10.3
+  - subread=2.0.0       # provides featureCounts
+  - pigz=2.4
+  - pysam=0.22.1
+  - pip:
+    - ribodetector==0.3.1

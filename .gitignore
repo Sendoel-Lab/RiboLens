@@ -1,0 +1,45 @@
+# Pipeline outputs
+results/
+test_results/
+test_results_demux/
+testdata/
+
+# Snakemake
+.snakemake/
+*.snakemake.log
+
+# DAG images
+dag_*.png
+
+# Conda
+.conda/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Large files
+*.bam
+*.bam.bai
+*.fastq.gz
+*.pdf
+*.rpm
+*.zip
+
+# bcl2fastq binary
+bcl2fastq*
+config_test_local.yaml
+
+ribolens_test/
+
+# Per-run outputs and scratch (large; contain /mnt symlinks)
+runs/
