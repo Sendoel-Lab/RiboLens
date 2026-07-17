@@ -1,0 +1,12 @@
+# Fetching data from SRA/GEO.
+# See the GSE280255 appendix in the README.
+name: sra-tools
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - sra-tools=3.4.1      # fastq-dump, fasterq-dump, vdb-dump
+  - entrez-direct=25.3   # esearch/efetch, for mapping GSE -> SRR accessions
+  - pigz=2.8             # fastq-dump streams uncompressed; this recompresses it
+  - python>=3.8          # for parsing the run XML

@@ -76,6 +76,9 @@ cp configs/config.yaml my_experiment.yaml
 snakemake -j 16 --configfile my_experiment.yaml
 ```
 
+> Starting from FASTQ downloaded from GEO/SRA? The cell barcode needs recovering
+> first -- see [Appendix: the published scribo-seq dataset (GSE280255)](#appendix-the-published-scribo-seq-dataset-gse280255).
+
 ### Test run
 
 To sanity-check the full pipeline end-to-end on a small dataset, copy `configs/config.yaml`, point `fastq_dir` at a small FASTQ subsample, and enable the optional steps:
@@ -173,3 +176,89 @@ Lane,Sample_ID,index,index2
 - **Salmon / Alevin** - Patro R, Duggal G, Love MI, Irizarry RA, Kingsford C. Salmon provides fast and bias-aware quantification of transcript expression. *Nat Methods* 14:417-419, 2017. [doi:10.1038/nmeth.4197](https://doi.org/10.1038/nmeth.4197); Srivastava A, Malik L, Smith T, Sudbery I, Patro R. Alevin efficiently estimates accurate gene abundances from dscRNA-seq data. *Genome Biol* 20:65, 2019. [doi:10.1186/s13059-019-1670-y](https://doi.org/10.1186/s13059-019-1670-y)
 - **riboWaltz** - Lauria F, *et al.* riboWaltz: Optimization of ribosome P-site positioning in ribosome profiling data. *PLoS Comput Biol* 14(8):e1006169, 2018. [doi:10.1371/journal.pcbi.1006169](https://doi.org/10.1371/journal.pcbi.1006169)
 - **bcl2fastq** - Illumina conversion software ([product page](https://support.illumina.com/sequencing/sequencing_software/bcl2fastq-conversion-software.html))
+
+---
+
+## Appendix: the published scribo-seq dataset (GSE280255)
+
+Specific to GSE280255 rather than to RiboLens itself.
+
+### Recovering the cell barcodes
+
+scribo-seq carries the 10nt cell barcode as the i5 index, which lives only in the
+read header. SRA does not serve that field by default, so a plain `fastq-dump` returns
+reads with no barcode:
+
+```
+on disk   @LH00289:11:22CL22LT3:1:1101:1823:1016 1:N:0:NATCAG+GCGTTCAGCA
+                                                        i7     i5 = cell barcode
+from SRA  @SRR31108338.1 LH00289:11:22CL22LT3:1:1101:1823:1016 length=151
+```
+
+The cDNA and the UMI survive; only the barcode is gone. It is not lost from the
+archive, though -- SRA keeps it per read in `SPOT_GROUP`. You can get it back with a
+`$sg` defline and the original FASTQ comes out byte for byte:
+
+```bash
+conda env create -f envs/sra-tools.yaml   # first time only
+conda activate sra-tools
+
+fastq-dump -Z --defline-seq '@$sn 1:N:0:$sg' --defline-qual '+' SRR31108340 \
+    | pigz > young9_S3_R1_001.fastq.gz
+```
+
+To check a download, the whole of SRR31108340 (66,689,088 reads) hashes to:
+
+```console
+$ fastq-dump -Z --defline-seq '@$sn 1:N:0:$sg' --defline-qual '+' SRR31108340 | md5sum
+b6bdf53b58f990e3effe34bebcc4412a
+```
+
+### Accessions
+
+12 samples across 41 runs, 375.2 GiB archived. `SRR311083xx` is the 2024 deposit;
+`SRR3937922x-3x` is the 2026 resequencing addition.
+
+| Run | GSM | Sample | GEO filename |
+| --- | --- | --- | --- |
+| SRR31108357 | GSM8593236 | nuclease_test | `nuclease_S1_R1_001.fastq.gz` |
+| SRR31108361 | GSM8593237 | Old2 | `old2_S1_R1_001.fastq.gz` |
+| SRR31108362 | GSM8593237 | Old2 | `old2_S2_R1_001.fastq.gz` |
+| SRR31108363 | GSM8593237 | Old2 | `old2_S3_R1_001.fastq.gz` |
+| SRR39379220 | GSM8593237 | Old2 | `old2_S4_L001_R1_001.fastq.gz` |
+| SRR39379221 | GSM8593237 | Old2 | `old2_S4_L002_R1_001.fastq.gz` |
+| SRR39379222 | GSM8593237 | Old2 | `old2_jun2025_R1_001.fastq.gz` |
+| SRR31108358 | GSM8593238 | Old4 | `old4_S1_R1_001.fastq.gz` |
+| SRR31108359 | GSM8593238 | Old4 | `old4_S2_R1_001.fastq.gz` |
+| SRR31108360 | GSM8593238 | Old4 | `old4_S3_R1_001.fastq.gz` |
+| SRR39379223 | GSM8593238 | Old4 | `old4_S5_L001_R1_001.fastq.gz` |
+| SRR39379224 | GSM8593238 | Old4 | `old4_S5_L002_R1_001.fastq.gz` |
+| SRR39379225 | GSM8593238 | Old4 | `old4_jun2025_R1_001.fastq.gz` |
+| SRR31108355 | GSM8593239 | Old11 | `old11_S1_R1_001.fastq.gz` |
+| SRR31108356 | GSM8593239 | Old11 | `old11_S2_R1_001.fastq.gz` |
+| SRR31108353 | GSM8593240 | Old12 | `old12_S1_R1_001.fastq.gz` |
+| SRR31108354 | GSM8593240 | Old12 | `old12_S2_R1_001.fastq.gz` |
+| SRR31108351 | GSM8593241 | Old7 | `old7_S1_R1_001.fastq.gz` |
+| SRR31108352 | GSM8593241 | Old7 | `old7_S2_R1_001.fastq.gz` |
+| SRR31108348 | GSM8593242 | Young1 | `young1_S1_R1_001.fastq.gz` |
+| SRR31108349 | GSM8593242 | Young1 | `young1_S2_R1_001.fastq.gz` |
+| SRR31108350 | GSM8593242 | Young1 | `young1_S3_R1_001.fastq.gz` |
+| SRR39379226 | GSM8593242 | Young1 | `young1_S1_L001_R1_001.fastq.gz` |
+| SRR39379227 | GSM8593242 | Young1 | `young1_S1_L002_R1_001.fastq.gz` |
+| SRR39379228 | GSM8593242 | Young1 | `young1_jun2025_R1_001.fastq.gz` |
+| SRR31108345 | GSM8593243 | Young3 | `young3_S1_R1_001.fastq.gz` |
+| SRR31108346 | GSM8593243 | Young3 | `young3_S2_R1_001.fastq.gz` |
+| SRR31108347 | GSM8593243 | Young3 | `young3_S3_R1_001.fastq.gz` |
+| SRR39379229 | GSM8593243 | Young3 | `young3_S2_L001_R1_001.fastq.gz` |
+| SRR39379230 | GSM8593243 | Young3 | `young3_S2_L002_R1_001.fastq.gz` |
+| SRR39379231 | GSM8593243 | Young3 | `young3_jun2025_R1_001.fastq.gz` |
+| SRR31108343 | GSM8593244 | Young10 | `young10_S1_R1_001.fastq.gz` |
+| SRR31108344 | GSM8593244 | Young10 | `young10_S2_R1_001.fastq.gz` |
+| SRR31108341 | GSM8593245 | Young8 | `young8_S1_R1_001.fastq.gz` |
+| SRR31108342 | GSM8593245 | Young8 | `young8_S2_R1_001.fastq.gz` |
+| SRR31108338 | GSM8593246 | Young9 | `young9_S1_R1_001.fastq.gz` |
+| SRR31108339 | GSM8593246 | Young9 | `young9_S2_R1_001.fastq.gz` |
+| SRR31108340 | GSM8593246 | Young9 | `young9_S3_R1_001.fastq.gz` |
+| SRR39379232 | GSM8593246 | Young9 | `young9_S3_L001_R1_001.fastq.gz` |
+| SRR39379233 | GSM8593246 | Young9 | `young9_S3_L002_R1_001.fastq.gz` |
+| SRR31108337 | GSM8593247 | Sca-1-negative | `sca_S1_R1_001.fastq.gz` |
