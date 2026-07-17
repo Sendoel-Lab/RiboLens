@@ -21,6 +21,10 @@ bcl2fastq_extra_opts: "--ignore-missing-bcls --minimum-trimmed-read-length 5 --m
 fastq_dir: ""
 output_dir: "results"
 # samples: []              # explicit sample list; if absent, auto-discover from fastq_dir or sample_sheet
+#
+# Fetching FASTQs from GEO/SRA? The cell barcode is the i5 index and lives only in
+# the read header, which the archives drop by default. See the GSE280255 appendix in
+# the README for the fastq-dump incantation that brings it back.
 
 # ---- Trimming (fastp) ----
 adapter_seq: "TGGAATTCTCGG"  # adapter to trim; older experiments used "TGGAATTCTC"
@@ -30,12 +34,20 @@ umi_len: 10                  # UMI length (from read1 5' end)
 
 # ---- rRNA removal (bowtie2) ----
 rrna_index: "/path/to/bowtie2/rrna_trna_index"  # bowtie2 index prefix
+# With -p > 1 bowtie2 emits reads in thread-completion order, so two runs of the
+# same data give byte-different (though scientifically identical) BAMs. --reorder
+# makes runs bit-reproducible at no measurable cost. Set false for the old behaviour.
+bowtie2_reorder: true
 
 # ---- Ribodetector (optional second rRNA filter) ----
 run_ribodetector: true
 ribodetector_path: "ribodetector_cpu"  # absolute path, or assume on PATH (scribo env)
 ribodetector_len: 29
 ribodetector_chunk_size: 6000
+# ribodetector keeps the same reads run to run but emits them in worker-completion
+# order, so with threads_ribodetector > 1 the BAMs are byte-different (though
+# scientifically identical) between runs. Count matrices are unaffected. Set
+# threads_ribodetector: 1 below if you need bit-for-bit reproducible BAMs.
 
 # ---- STAR alignment ----
 star_index: "/path/to/star/genome_index"  # built with mouse GRCm38 / gencode vM25
@@ -54,6 +66,12 @@ whitelist: "scripts/miRv6.whitelist.txt"
 scripts_dir: "scripts"
 
 # ---- Post-alignment ----
+# umi_tools picks a representative read per UMI group using both Python's random
+# module and set iteration order, so an unseeded dedup gives a different (equally
+# valid) representative every run -- 5 distinct outputs in 6 runs, measured. The
+# rules pin PYTHONHASHSEED=0 and pass this seed, which makes dedup reproducible.
+# The seed changes which read is kept, never how many molecules survive.
+umi_tools_random_seed: 1
 
 # ---- Optional steps ----
 run_bam_split: false          # split dedup BAM into per-cell BAMs

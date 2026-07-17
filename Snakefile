@@ -22,6 +22,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(workflow.snakefile), "scripts"))
 from helpers import (
+    cfg_bool,
     find_sample_fastq,
     get_fastq_dir,
     get_filtered_fastq as _get_filtered_fastq,
@@ -49,8 +50,8 @@ def get_filtered_fastq(wildcards):
 # Validation
 # =============================================================================
 
-if config.get("run_featurecounts", False):
-    assert config.get("run_bam_split", False), \
+if cfg_bool(config, "run_featurecounts", False):
+    assert cfg_bool(config, "run_bam_split", False), \
         "Config error: run_featurecounts requires run_bam_split to be true"
 
 
@@ -81,7 +82,7 @@ def get_demux_output_fastqs():
     return [f"{demux_dir}/{s}_R1_001.fastq.gz" for s in SAMPLES]
 
 
-if config.get("run_demux", False):
+if cfg_bool(config, "run_demux", False):
     checkpoint demux:
         """Demultiplex BCL files into per-sample FASTQs using bcl2fastq.
         Uses a Snakemake checkpoint so the DAG is re-evaluated after demux
@@ -101,7 +102,7 @@ if config.get("run_demux", False):
             mismatches   = config.get("barcode_mismatches", 1),
             compression  = config.get("fastq_compression", 9),
             extra        = config.get("bcl2fastq_extra_opts", "--ignore-missing-bcls --minimum-trimmed-read-length 5 --mask-short-adapter-reads 5"),
-            no_lane_split = "--no-lane-splitting" if config.get("no_lane_splitting", False) else "",
+            no_lane_split = "--no-lane-splitting" if cfg_bool(config, "no_lane_splitting", False) else "",
         shell:
             """
             {params.bcl2fastq} -p {threads} \
@@ -118,7 +119,7 @@ if config.get("run_demux", False):
 
 def get_sample_fastq(wildcards):
     """Resolve the per-sample FASTQ (waits for demux checkpoint if enabled)."""
-    if config.get("run_demux", False):
+    if cfg_bool(config, "run_demux", False):
         fq_dir = checkpoints.demux.get().output.outdir
     else:
         fq_dir = FASTQ_DIR
@@ -178,9 +179,16 @@ rule bowtie2_rrna:
     threads: config.get("threads_bowtie2", 16)
     params:
         index = config["rrna_index"],
+        # With -p > 1, bowtie2 emits reads in thread-completion order, so --un-gz
+        # comes out in a different order on every run. The surviving read set is
+        # identical either way and the Solo count matrices are unaffected, but the
+        # order carries into the BAM (coordinate ties) and into which read umi_tools
+        # picks per UMI group, leaving the run not bit-reproducible, which is fixed by
+        # --reorder
+        reorder = "--reorder" if cfg_bool(config, "bowtie2_reorder", True) else "",
     shell:
         """
-        bowtie2 -p {threads} -D 20 -R 3 -N 1 -L 15 \
+        bowtie2 -p {threads} -D 20 -R 3 -N 1 -L 15 {params.reorder} \
             -U {input.fastq} \
             -x {params.index} \
             --un-gz {output.fastq} \
@@ -338,15 +346,18 @@ rule dedup_genome:
         f"{OUTDIR}/logs/{{sample}}/dedup_genome.log"
     benchmark:
         f"{OUTDIR}/benchmarks/{{sample}}/dedup_genome.tsv"
+    params:
+        seed = config.get("umi_tools_random_seed", 1),
     shell:
         """
-        umi_tools dedup \
+        PYTHONHASHSEED=0 umi_tools dedup \
             -I {input.bam} \
             -S {output.bam} \
             -L {log} \
             --extract-umi-method tag \
             --umi-tag=UR \
             --cell-tag=CB \
+            --random-seed={params.seed} \
             --per-cell
         samtools index {output.bam} 2>> {log}
         """
@@ -394,6 +405,7 @@ rule dedup_tx:
     params:
         cb_bam = lambda wc: f"{OUTDIR}/{wc.sample}/tx_bam/{wc.sample}.tx.cb.bam",
         script = os.path.join(config["scripts_dir"], "transfer_cb_tx.py"),
+        seed = config.get("umi_tools_random_seed", 1),
     shell:
         """
         # Stamp the corrected CB onto the transcriptome reads (by read name) so
@@ -403,12 +415,13 @@ rule dedup_tx:
             bash -c '$CONDA_PREFIX/bin/python {params.script} {input.cb_source} {input.bam} {params.cb_bam}' \
             > {log} 2>&1
         samtools index {params.cb_bam} 2>> {log}
-        umi_tools dedup \
+        PYTHONHASHSEED=0 umi_tools dedup \
             -I {params.cb_bam} \
             -S {output.bam} \
             --extract-umi-method tag \
             --umi-tag=UR \
             --cell-tag=CB \
+            --random-seed={params.seed} \
             --per-cell >> {log} 2>&1
         samtools index {output.bam} 2>> {log}
         rm -f {params.cb_bam} {params.cb_bam}.bai
@@ -532,7 +545,7 @@ rule ribowaltz_qc:
         bam_dir    = lambda wc: f"{OUTDIR}/{wc.sample}/tx_bam",
         bam_prefix = lambda wc: f"{wc.sample}.tx.dedup",
         output_dir = lambda wc: f"{OUTDIR}/{wc.sample}/ribowaltz",
-        cds_only   = "--cds_only" if config.get("ribowaltz_cds_only", True) else "",
+        cds_only   = "--cds_only" if cfg_bool(config, "ribowaltz_cds_only", True) else "",
         conda_env  = config.get("ribowaltz_conda_env", "scribo-ribowaltz"),
     shell:
         """

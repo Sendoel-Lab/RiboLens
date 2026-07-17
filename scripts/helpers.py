@@ -7,6 +7,32 @@ without importing Snakemake.
 import glob
 import os
 
+_TRUE = {"true", "yes", "on", "1"}
+_FALSE = {"false", "no", "off", "0", ""}
+
+
+def cfg_bool(config, key, default=False):
+    """Read a boolean config value, tolerating strings.
+
+    A configfile gives real booleans, but Snakemake's --config passes values
+    through as strings, so `--config run_report=false` reads back as the truthy
+    string "false" and silently means the opposite of what was typed. Anything
+    unrecognised raises rather than being guessed at.
+    """
+    value = config.get(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in _TRUE:
+            return True
+        if v in _FALSE:
+            return False
+        raise ValueError(
+            f"config '{key}': cannot read {value!r} as true/false"
+        )
+    return bool(value)
+
 
 def parse_sample_sheet(sample_sheet):
     """Parse a bcl2fastq sample sheet CSV and return unique Sample_IDs."""
@@ -34,7 +60,7 @@ def parse_sample_sheet(sample_sheet):
 
 def get_fastq_dir(config):
     """Return the directory containing FASTQ files (demux output or user-supplied)."""
-    if config.get("run_demux", False):
+    if cfg_bool(config, "run_demux", False):
         return os.path.join(config["output_dir"], "demux")
     return config["fastq_dir"]
 
@@ -43,7 +69,7 @@ def get_samples(config):
     """Return sample list from config, sample sheet, or auto-discover from FASTQ dir."""
     if config.get("samples"):
         return config["samples"]
-    if config.get("run_demux", False):
+    if cfg_bool(config, "run_demux", False):
         ss = config.get("sample_sheet", "")
         if ss and os.path.exists(ss):
             return parse_sample_sheet(ss)
@@ -59,7 +85,7 @@ def get_samples(config):
 
 def get_filtered_fastq(config, outdir, sample):
     """Return path to rRNA-filtered FASTQ (ribodetector output or bowtie2 output)."""
-    if config.get("run_ribodetector", False):
+    if cfg_bool(config, "run_ribodetector", False):
         return f"{outdir}/{sample}/ribodetector/{sample}.rd.fastq.gz"
     return f"{outdir}/{sample}/rrna/{sample}.no_rrna.fastq.gz"
 
@@ -100,14 +126,14 @@ def get_final_outputs(config, outdir, samples):
             f"{outdir}/{s}/tx_bam/{s}.tx.dedup.bam.bai",
             f"{outdir}/{s}/qc/{s}.fastp.json",
         ])
-        if config.get("run_bam_split", False):
+        if cfg_bool(config, "run_bam_split", False):
             targets.append(f"{outdir}/{s}/bams/.split_done")
-        if config.get("run_featurecounts", False):
+        if cfg_bool(config, "run_featurecounts", False):
             targets.append(f"{outdir}/{s}/featurecounts/{s}.fc_cds.tsv.gz")
-        if config.get("run_salmon", False):
+        if cfg_bool(config, "run_salmon", False):
             targets.append(f"{outdir}/{s}/salmon/.salmon_done")
-        if config.get("run_ribowaltz", False):
+        if cfg_bool(config, "run_ribowaltz", False):
             targets.append(f"{outdir}/{s}/ribowaltz/length_distribution.csv")
-        if config.get("run_report", False):
+        if cfg_bool(config, "run_report", False):
             targets.append(f"{outdir}/{s}/{s}.report.html")
     return targets
